@@ -2,6 +2,27 @@
 
 ChainCustody is a full-stack supply chain tracking platform designed to map, split, and trace material lineages across global logistics networks. By modeling supply chains as a **Directed Acyclic Graph (DAG)** in a relational database, the platform tracks parent-to-child batch conversions (e.g., splitting bulk raw materials into processed, consumer-ready retail packages) with immutable, append-only historical audit logs.
 
+# Languages
+[![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
+[![SQL](https://img.shields.io/badge/SQL-CC292B?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![PL/pgSQL](https://img.shields.io/badge/PL/pgSQL-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/docs/current/plpgsql.html)
+[![PowerShell](https://img.shields.io/badge/PowerShell-5391FE?style=flat&logo=powershell&logoColor=white)](https://learn.microsoft.com/en-us/powershell/)
+[![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=flat&logo=html5&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/HTML)
+
+# Frontend UI & Tools
+[![React](https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB)](https://react.dev/)
+[![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat&logo=vite&logoColor=white)](https://vite.dev/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=flat&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
+[![Lucide React](https://img.shields.io/badge/Lucide_React-000000?style=flat&logo=lucide&logoColor=white)](https://lucide.dev/)
+
+# Backend Architecture
+[![Node.js](https://img.shields.io/badge/Node.js-339933?style=flat&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Express.js](https://img.shields.io/badge/Express.js-000000?style=flat&logo=express&logoColor=white)](https://expressjs.com/)
+[![node-postgres](https://img.shields.io/badge/node--postgres-339933?style=flat&logo=postgresql&logoColor=white)](https://node-postgres.com/)
+
+# Database Layer
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=flat&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+
 ---
 
 ## Key Features
