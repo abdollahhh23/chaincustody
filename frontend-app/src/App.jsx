@@ -24,9 +24,14 @@ const buildDownstreamTree = (nodes, rootId) => {
 };
 
 // --- VISUAL COMPONENT: HORIZONTAL WORKFLOW NODE GRAPH ---
-const WorkflowNodeGroup = ({ node, isLastChild = false }) => {
+const WorkflowNodeGroup = ({ node, isLastChild = false, onNodeClick }) => {
   if (!node) return null;
   const hasChildren = node.children && node.children.length > 0;
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (onNodeClick) onNodeClick(node);
+  };
 
   return (
     <div className="flex items-center gap-12 relative font-sans">
@@ -38,7 +43,10 @@ const WorkflowNodeGroup = ({ node, isLastChild = false }) => {
           <div className="w-3 h-3 bg-neutral-950 border-2 border-red-600 rounded-full absolute -left-1.5 z-10 shadow-[0_0_8px_#dc2626]" />
         )}
 
-        <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 w-72 shadow-2xl hover:border-red-600/60 hover:shadow-[0_0_25px_rgba(220,38,38,0.15)] transition-all duration-300">
+        <div 
+          onClick={handleClick}
+          className="bg-neutral-900 border border-neutral-800 rounded-lg p-5 w-72 shadow-2xl hover:border-red-600/60 hover:shadow-[0_0_25px_rgba(220,38,38,0.15)] transition-all duration-300 cursor-pointer"
+        >
           <div className="flex justify-between items-center mb-2">
             <span className="text-xs font-mono font-bold text-neutral-100 flex items-center gap-2 tracking-wider">
               <div className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
@@ -76,6 +84,7 @@ const WorkflowNodeGroup = ({ node, isLastChild = false }) => {
               key={child.id} 
               node={child} 
               isLastChild={index === node.children.length - 1} 
+              onNodeClick={onNodeClick}
             />
           ))}
         </div>
@@ -85,7 +94,7 @@ const WorkflowNodeGroup = ({ node, isLastChild = false }) => {
   );
 };
 
-// --- MAIN INTEGRATED APPLICATION APPLICATION ---
+// --- MAIN INTEGRATED APPLICATION ---
 export default function App() {
   const [batches, setBatches] = useState([]);
   const [selectedParentId, setSelectedParentId] = useState('');
@@ -94,6 +103,7 @@ export default function App() {
   const [flatNodesPool, setFlatNodesPool] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [selectedNodeInfo, setSelectedNodeInfo] = useState(null); // NEW: for clicked node display
 
   const [childSplits, setChildSplits] = useState([]);
   const [newShipment, setNewShipment] = useState({
@@ -213,6 +223,11 @@ export default function App() {
     } catch (err) {
       setError(err.message);
     }
+  };
+
+  // Handler for node clicks
+  const handleNodeClick = (node) => {
+    setSelectedNodeInfo(node);
   };
 
   return (
@@ -350,6 +365,40 @@ export default function App() {
             )}
           </section>
 
+          {/* NEW: NODE INSPECTOR (VISUAL UPGRADE) */}
+          {selectedNodeInfo && (
+            <section className="bg-neutral-900 border border-red-600/30 rounded-lg p-6 shadow-2xl">
+              <h2 className="text-xs font-bold tracking-[0.15em] text-red-500 uppercase mb-5 flex items-center gap-2">
+                <div className="w-1.5 h-1.5 bg-red-600 rounded-none rotate-45" />
+                Node Inspector (Clicked Node)
+              </h2>
+              <div className="space-y-3 text-xs font-mono">
+                <div className="flex justify-between border-b border-neutral-800 pb-2">
+                  <span className="text-neutral-500">BATCH</span>
+                  <span className="text-neutral-100 font-bold">{selectedNodeInfo.batch_number}</span>
+                </div>
+                <div className="flex justify-between border-b border-neutral-800 pb-2">
+                  <span className="text-neutral-500">SKU</span>
+                  <span className="text-neutral-100">{selectedNodeInfo.sku}</span>
+                </div>
+                <div className="flex justify-between border-b border-neutral-800 pb-2">
+                  <span className="text-neutral-500">FACILITY</span>
+                  <span className="text-neutral-100">{selectedNodeInfo.current_facility}</span>
+                </div>
+                <div className="flex justify-between border-b border-neutral-800 pb-2">
+                  <span className="text-neutral-500">QUANTITY</span>
+                  <span className="text-red-400 font-bold">{parseFloat(selectedNodeInfo.total_quantity).toFixed(2)} {selectedNodeInfo.unit || 'kg'}</span>
+                </div>
+                {selectedNodeInfo.directly_derived_from_parent && (
+                  <div className="flex justify-between">
+                    <span className="text-neutral-500">PARENT ID</span>
+                    <span className="text-neutral-400">{selectedNodeInfo.directly_derived_from_parent}</span>
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
           {error && <div className="bg-red-950/30 border border-red-900 text-neutral-200 rounded p-4 text-xs font-mono">{error}</div>}
           {success && <div className="bg-neutral-900 border border-neutral-800 rounded p-4 text-xs font-mono text-neutral-200">{success}</div>}
         </div>
@@ -361,14 +410,14 @@ export default function App() {
               <h2 className="text-xs font-bold tracking-[0.15em] text-neutral-400 uppercase flex items-center gap-2">
                 Execution Flow Workspace
               </h2>
-              <p className="text-xs text-neutral-500 mt-1">Horizontal lineage mapping visualization canvas.</p>
+              <p className="text-xs text-neutral-500 mt-1">Horizontal lineage mapping visualization canvas. Click any node to inspect its details.</p>
             </div>
 
             {/* DOT MATRIX BACKDROP CANVAS */}
             <div className="flex-1 bg-neutral-950 border border-neutral-800 rounded p-8 overflow-auto flex items-center relative shadow-inner min-h-[500px] style-grid-pattern">
               {lineageTree ? (
                 <div className="relative inline-block">
-                  <WorkflowNodeGroup node={lineageTree} />
+                  <WorkflowNodeGroup node={lineageTree} onNodeClick={handleNodeClick} />
                 </div>
               ) : (
                 <div className="mx-auto text-center font-mono text-[11px] text-neutral-600 tracking-widest uppercase">
