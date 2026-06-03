@@ -3,10 +3,59 @@ import { getClient, query } from '../db.js';
 
 const router = Router();
 
+// 1. FETCH BASELINE POOL: Serves all batches to populate UI dropdown selectors
+router.get('/', async (req, res) => {
+  try {
+    const result = await query('SELECT * FROM batches ORDER BY created_at DESC');
+    return res.status(200).json(result.rows);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Failed to retrieve batch assets pool.' });
+  }
+});
+
+// 2. REGISTER NEW ROOT NODE: Creates an absolute parent shipment entry
+router.post('/register', async (req, res) => {
+  const { sku, batch_number, total_quantity, unit, current_facility, username } = req.body;
+  const client = await getClient();
+  
+  try {
+    await client.query('BEGIN');
+    
+    const userRes = await client.query('SELECT id FROM users WHERE username = $1', [username || 'operator_alpha']);
+    const userId = userRes.rows[0]?.id || 1;
+
+    const batchRes = await client.query(
+      `INSERT INTO batches (sku, batch_number, total_quantity, unit, current_facility) 
+       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [sku, batch_number, total_quantity, unit || 'kg', current_facility]
+    );
+    
+    const newBatch = batchRes.rows[0];
+
+    await client.query(
+      `INSERT INTO logistics_events (batch_id, event_type, facility, logged_by, metadata) 
+       VALUES ($1, 'sourced', $2, $3, $4)`,
+      [newBatch.id, current_facility, userId, JSON.stringify({ origin: 'Direct UI Entry Registration' })]
+    );
+
+    await client.query('COMMIT');
+    return res.status(201).json({ success: true, batch: newBatch });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(error);
+    return res.status(500).json({ error: 'Failed to register new root shipment.', details: error.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 3. SECURED TRANSACTION SPLIT CONTROLLER
 router.post('/split', async (req, res) => {
   const { parentBatchId, children, loggedByUserId } = req.body;
+  const userId = loggedByUserId || 1; 
 
-  if (!parentBatchId || !Array.isArray(children) || children.length === 0 || !loggedByUserId) {
+  if (!parentBatchId || !Array.isArray(children) || children.length === 0) {
     return res.status(400).json({ error: 'Invalid parameters. Missing layout properties.' });
   }
 
@@ -61,7 +110,7 @@ router.post('/split', async (req, res) => {
       await client.query(
         `INSERT INTO logistics_events (batch_id, event_type, facility, logged_by, metadata)
          VALUES ($1, 'manufactured', $2, $3, $4)`,
-        [newChild.id, facility, loggedByUserId, JSONBox({ parent_source_id: parentBatchId })]
+        [newChild.id, facility, userId, JSON.stringify({ parent_source_id: parentBatchId })]
       );
     }
 
@@ -71,8 +120,8 @@ router.post('/split', async (req, res) => {
       [
         parentBatchId, 
         parentBatch.current_facility, 
-        loggedByUserId, 
-        JSONBox({ split_to_children: createdChildren.map(c => c.id), total_split_deducted: totalChildAllocatedQuantity })
+        userId, 
+        JSON.stringify({ split_to_children: createdChildren.map(c => c.id), total_split_deducted: totalChildAllocatedQuantity })
       ]
     );
 
@@ -88,6 +137,7 @@ router.post('/split', async (req, res) => {
   }
 });
 
+// 4. DOWNSTREAM RECURSIVE ENGINE: Tracks descendant hierarchies and their split quantities
 router.get('/trace/:id', async (req, res) => {
   const targetId = req.params.id;
 
@@ -95,20 +145,22 @@ router.get('/trace/:id', async (req, res) => {
     WITH RECURSIVE lineage_tree AS (
         SELECT b.id, b.sku, b.batch_number, b.total_quantity, b.unit, b.current_facility, b.created_at,
                0 AS generation_depth,
-               NULL::INT AS directly_derived_from_parent
+               NULL::INT AS directly_derived_from_parent,
+               0::NUMERIC AS edge_split_quantity
         FROM batches b
         WHERE b.id = $1
 
         UNION ALL
 
-        SELECT parent.id, parent.sku, parent.batch_number, parent.total_quantity, parent.unit, parent.current_facility, parent.created_at,
+        SELECT child.id, child.sku, child.batch_number, child.total_quantity, child.unit, child.current_facility, child.created_at,
                tree.generation_depth + 1,
-               bl.parent_batch_id
-        FROM batches parent
-        JOIN batch_lineage bl ON parent.id = bl.parent_batch_id
-        JOIN lineage_tree tree ON bl.child_batch_id = tree.id
+               bl.parent_batch_id,
+               bl.split_quantity::NUMERIC
+        FROM batches child
+        JOIN batch_lineage bl ON child.id = bl.child_batch_id
+        JOIN lineage_tree tree ON bl.parent_batch_id = tree.id
     )
-    SELECT DISTINCT ON (id) * FROM lineage_tree ORDER BY id, generation_depth ASC;
+    SELECT id, sku, batch_number, total_quantity, unit, current_facility, created_at, generation_depth, directly_derived_from_parent, edge_split_quantity FROM lineage_tree ORDER BY generation_depth ASC, id ASC;
   `;
 
   try {
@@ -118,26 +170,13 @@ router.get('/trace/:id', async (req, res) => {
       return res.status(404).json({ error: 'Specified target batch context cannot be evaluated.' });
     }
 
-    const trackedBatchIds = traceRes.rows.map(item => item.id);
-    const eventsRes = await query(
-      `SELECT le.*, u.username as operator_identity 
-       FROM logistics_events le
-       JOIN users u ON le.logged_by = u.id
-       WHERE le.batch_id = ANY($1) 
-       ORDER BY le.timestamp DESC`,
-      [trackedBatchIds]
-    );
-
     return res.status(200).json({
-      lineageNodes: traceRes.rows,
-      historicalLedgerTimeline: eventsRes.rows
+      lineageNodes: traceRes.rows
     });
   } catch (err) {
     console.error('Error executing query:', err);
     return res.status(500).json({ error: 'Database tracking compilation failed.', details: err.message });
   }
 });
-
-function JSONBox(obj) { return JSON.stringify(obj); }
 
 export default router;
