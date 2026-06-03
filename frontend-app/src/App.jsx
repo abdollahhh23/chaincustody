@@ -103,7 +103,7 @@ export default function App() {
   const [flatNodesPool, setFlatNodesPool] = useState([]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [selectedNodeInfo, setSelectedNodeInfo] = useState(null); // NEW: for clicked node display
+  const [selectedNodeInfo, setSelectedNodeInfo] = useState(null);
 
   const [childSplits, setChildSplits] = useState([]);
   const [newShipment, setNewShipment] = useState({
@@ -128,6 +128,7 @@ export default function App() {
     fetchBatches();
   }, []);
 
+  // Fetch lineage tree when selected parent changes
   useEffect(() => {
     if (selectedParentId) {
       const match = batches.find(b => b.id === parseInt(selectedParentId));
@@ -158,8 +159,24 @@ export default function App() {
     }
   };
 
-  const totalAllocatedToFormInputs = childSplits.reduce((sum, child) => sum + (parseFloat(child.quantity) || 0), 0);
-  const remainingBalance = parentDetails ? parseFloat(parentDetails.total_quantity) - totalAllocatedToFormInputs : 0;
+  // Calculate total quantity already allocated to existing child nodes (committed splits)
+  const existingChildrenSum = React.useMemo(() => {
+    if (!parentDetails || !flatNodesPool.length) return 0;
+    // Find direct children of the selected parent in the lineage pool
+    const parentIdInt = parseInt(selectedParentId);
+    const directChildren = flatNodesPool.filter(node => 
+      node.directly_derived_from_parent === parentIdInt
+    );
+    return directChildren.reduce((sum, child) => sum + (parseFloat(child.total_quantity) || 0), 0);
+  }, [parentDetails, flatNodesPool, selectedParentId]);
+
+  // Total quantity pending in the split form
+  const pendingAllocationSum = childSplits.reduce((sum, child) => sum + (parseFloat(child.quantity) || 0), 0);
+
+  // Remaining = parent total - existing children - pending
+  const remainingBalance = parentDetails 
+    ? parseFloat(parentDetails.total_quantity) - existingChildrenSum - pendingAllocationSum
+    : 0;
 
   const addChildRow = () => {
     setChildSplits([...childSplits, { sku: parentDetails?.sku || '', batchNumber: '', quantity: '0', facility: '' }]);
@@ -195,6 +212,8 @@ export default function App() {
       setSuccess('Split transaction committed and secured successfully!');
       setChildSplits([]);
       await fetchBatches();
+      // Refresh the lineage tree to include the new children
+      await fetchLineageTree(selectedParentId);
     } catch (err) {
       setError(err.message);
     }
@@ -225,7 +244,6 @@ export default function App() {
     }
   };
 
-  // Handler for node clicks
   const handleNodeClick = (node) => {
     setSelectedNodeInfo(node);
   };
@@ -365,7 +383,7 @@ export default function App() {
             )}
           </section>
 
-          {/* NEW: NODE INSPECTOR (VISUAL UPGRADE) */}
+          {/* NODE INSPECTOR (VISUAL UPGRADE) */}
           {selectedNodeInfo && (
             <section className="bg-neutral-900 border border-red-600/30 rounded-lg p-6 shadow-2xl">
               <h2 className="text-xs font-bold tracking-[0.15em] text-red-500 uppercase mb-5 flex items-center gap-2">
@@ -408,7 +426,7 @@ export default function App() {
           <section className="bg-neutral-900 border border-neutral-800/50 rounded-lg p-6 min-h-[650px] relative overflow-hidden flex flex-col shadow-2xl">
             <div className="mb-6">
               <h2 className="text-xs font-bold tracking-[0.15em] text-neutral-400 uppercase flex items-center gap-2">
-                Execution Flow Workspace
+                Exploration Flow Workspace
               </h2>
               <p className="text-xs text-neutral-500 mt-1">Horizontal lineage mapping visualization canvas. Click any node to inspect its details.</p>
             </div>
