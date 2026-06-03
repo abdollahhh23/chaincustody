@@ -1,1 +1,17 @@
 @import "tailwindcss";
+
+/* Custom background configuration rules for n8n-style workspace backdrops */
+.style-grid-pattern {
+  background-size: 24px 24px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+/* Base resets to avoid standard browser margin distortions */
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  background-color: #020617; /* slate-950 */
+  min-height: 100vh;
+}

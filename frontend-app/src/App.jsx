@@ -23,43 +23,70 @@ const buildDownstreamTree = (nodes, rootId) => {
   return rootNode || map[rootId];
 };
 
-// --- VISUAL COMPONENT: NESTED TREE COMPONENT ---
-const NestedTreeRenderNode = ({ node }) => {
+// --- VISUAL COMPONENT: n8n NODE-FLOW GRAPH DESIGN ---
+// Recursively maps supply-chain lineage as an automation workflow diagram
+const WorkflowNodeGroup = ({ node, isLastChild = false }) => {
   if (!node) return null;
   const hasChildren = node.children && node.children.length > 0;
 
   return (
-    <div className="relative my-2 font-sans">
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm max-w-xl hover:border-emerald-500/40 transition-colors">
-        <div className="flex justify-between items-center mb-1">
-          <span className="text-xs font-mono font-bold text-slate-200 flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981]" />
-            {node.batch_number}
-          </span>
-          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-950 text-slate-500 border border-slate-800">
-            {node.sku}
-          </span>
+    <div className="flex items-center gap-12 relative">
+      
+      {/* INDIVIDUAL NODE ELEMENT CARD */}
+      <div className="relative flex items-center">
+        {/* Input Target Anchor Circle (hidden for master roots) */}
+        {node.directly_derived_from_parent && (
+          <div className="w-3 h-3 bg-slate-950 border-2 border-indigo-500 rounded-full absolute -left-1.5 z-10 shadow-[0_0_6px_#6366f1]" />
+        )}
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 w-72 shadow-xl hover:border-indigo-500/50 hover:shadow-[0_0_20px_rgba(99,102,241,0.1)] transition-all duration-200">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-mono font-bold text-slate-200 flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-indigo-500" />
+              {node.batch_number}
+            </span>
+            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-950 text-indigo-400 border border-slate-800/60">
+              {node.sku}
+            </span>
+          </div>
+          
+          <div className="space-y-1.5 mt-3 text-xs">
+            <div className="text-slate-400">
+              <span className="text-slate-500 font-mono">FACILITY:</span> {node.current_facility}
+            </div>
+            <div className="text-slate-400">
+              <span className="text-slate-500 font-mono">VOLUME:</span>{' '}
+              <span className="text-indigo-400 font-bold font-mono">
+                {parseFloat(node.total_quantity).toFixed(2)} {node.unit || 'kg'}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="text-sm font-medium text-slate-300 mt-2">
-          Facility Location: <span className="text-slate-400 font-normal">{node.current_facility}</span>
-        </div>
-        <div className="text-xs font-mono text-slate-400 mt-1">
-          Active Stock Weight: <span className="text-emerald-400 font-bold">{parseFloat(node.total_quantity).toFixed(2)} {node.unit || 'kg'}</span>
-        </div>
+
+        {/* Output Source Anchor Circle */}
+        {hasChildren && (
+          <div className="w-3 h-3 bg-indigo-500 border-2 border-slate-950 rounded-full absolute -right-1.5 z-10 shadow-[0_0_6px_#6366f1]" />
+        )}
       </div>
 
+      {/* RENDER FORWARD OUTBOUND WIRES AND SPLIT SEGMENTATIONS */}
       {hasChildren && (
-        <div className="ml-6 border-l-2 border-slate-800/80 pl-4 mt-2 space-y-2 relative">
-          {node.children.map((child) => (
-            <NestedTreeRenderNode key={child.id} node={child} />
+        <div className="flex flex-col justify-center relative space-y-4 py-2 border-l-2 border-dashed border-slate-800 pl-12 before:absolute before:left-0 before:top-1/2 before:-translate-y-1/2 before:w-12 before:h-0.5 before:bg-slate-800">
+          {node.children.map((child, index) => (
+            <WorkflowNodeGroup 
+              key={child.id} 
+              node={child} 
+              isLastChild={index === node.children.length - 1} 
+            />
           ))}
         </div>
       )}
+
     </div>
   );
 };
 
-// --- MAIN INTEGRATED APPLICATION ---
+// --- MAIN INTEGRATED APPLICATION APPLICATION GRAPH PANELS ---
 export default function App() {
   const [batches, setBatches] = useState([]);
   const [selectedParentId, setSelectedParentId] = useState('');
@@ -122,7 +149,6 @@ export default function App() {
     }
   };
 
-  // Sum up quantities split off to immediate direct children inside the database
   const totalDbChildrenDeducted = flatNodesPool.reduce((sum, node) => {
     if (node.directly_derived_from_parent === parseInt(selectedParentId)) {
       return sum + (parseFloat(node.edge_split_quantity) || 0);
@@ -130,12 +156,10 @@ export default function App() {
     return sum;
   }, 0);
 
-  // Sum up current uncommitted values typed into the active UI form rows
   const totalAllocatedToFormInputs = childSplits.reduce((sum, child) => sum + (parseFloat(child.quantity) || 0), 0);
   
-  // FIXED BALANCING EQUATION: Subtracts both database children and form inputs from the total quantity
   const remainingBalance = parentDetails 
-    ? parseFloat(parentDetails.total_quantity) - totalDbChildrenDeducted - totalAllocatedToFormInputs 
+    ? parseFloat(parentDetails.total_quantity) - totalAllocatedToFormInputs 
     : 0;
 
   const addChildRow = () => {
@@ -203,72 +227,79 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 p-8 text-slate-100 font-sans antialiased">
-      <header className="max-w-6xl mx-auto mb-8 border-b border-slate-800 pb-4">
-        <h1 className="text-3xl font-bold text-emerald-400">ChainCustody Node Manager</h1>
-        <p className="text-sm text-slate-400 mt-1">Execute multi-level immutable splits and register new tracking roots.</p>
+    <div className="min-h-screen bg-slate-950 p-8 text-slate-100 font-sans antialiased selection:bg-indigo-500/30">
+      <header className="max-w-[1600px] mx-auto mb-8 border-b border-slate-900 pb-4 flex justify-between items-center">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-indigo-400">ChainCustody Workflow Node Canvas</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Manage supply-chain splits as functional execution node workflows.</p>
+        </div>
+        <div className="text-xs font-mono px-3 py-1 bg-slate-900 border border-slate-800 rounded text-slate-400">
+          Environment: Local Dev Pool
+        </div>
       </header>
 
-      <main className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <main className="max-w-[1600px] mx-auto grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
         
-        <div className="lg:col-span-5 space-y-6">
-          <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-blue-500" />
+        {/* LEFT COLUMN PANEL: FORM CONFIGURATORS */}
+        <div className="xl:col-span-4 space-y-6">
+          
+          <section className="bg-slate-900/60 border border-slate-900 rounded-xl p-5 shadow-2xl backdrop-blur-md">
+            <h2 className="text-sm font-semibold tracking-wide text-slate-300 uppercase mb-4 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
               Register New Root Shipment
             </h2>
             <form onSubmit={handleRegisterShipment} className="space-y-3">
               <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">SKU REFERENCE</label>
-                <input required type="text" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm text-slate-100 focus:border-blue-500 outline-none" placeholder="e.g. PREMIUM-MATCHA" value={newShipment.sku} onChange={e => setNewShipment({...newShipment, sku: e.target.value})} />
+                <label className="block text-[10px] font-mono text-slate-500 mb-1">SKU REFERENCE</label>
+                <input required type="text" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 outline-none" placeholder="e.g. PREMIUM-MATCHA" value={newShipment.sku} onChange={e => setNewShipment({...newShipment, sku: e.target.value})} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-mono text-slate-400 mb-1">BATCH IDENTIFIER</label>
-                  <input required type="text" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm text-slate-100 focus:border-blue-500 outline-none" placeholder="e.g. B-MTC-001" value={newShipment.batch_number} onChange={e => setNewShipment({...newShipment, batch_number: e.target.value})} />
+                  <label className="block text-[10px] font-mono text-slate-500 mb-1">BATCH IDENTIFIER</label>
+                  <input required type="text" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 outline-none" placeholder="e.g. B-MTC-001" value={newShipment.batch_number} onChange={e => setNewShipment({...newShipment, batch_number: e.target.value})} />
                 </div>
                 <div>
-                  <label className="block text-xs font-mono text-slate-400 mb-1">INITIAL QUANTITY</label>
-                  <input required type="number" step="any" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm text-slate-100 focus:border-blue-500 outline-none" placeholder="0.00" value={newShipment.total_quantity} onChange={e => setNewShipment({...newShipment, total_quantity: e.target.value})} />
+                  <label className="block text-[10px] font-mono text-slate-500 mb-1">INITIAL QUANTITY</label>
+                  <input required type="number" step="any" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 outline-none" placeholder="0.00" value={newShipment.total_quantity} onChange={e => setNewShipment({...newShipment, total_quantity: e.target.value})} />
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">ORIGIN / CURRENT FACILITY</label>
-                <input required type="text" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-sm text-slate-100 focus:border-blue-500 outline-none" placeholder="e.g. Kyoto Export Warehouse" value={newShipment.current_facility} onChange={e => setNewShipment({...newShipment, current_facility: e.target.value})} />
+                <label className="block text-[10px] font-mono text-slate-500 mb-1">ORIGIN / DISPATCH HUB</label>
+                <input required type="text" className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-1.5 text-xs text-slate-100 focus:border-indigo-500 outline-none" placeholder="e.g. Kyoto Export Warehouse" value={newShipment.current_facility} onChange={e => setNewShipment({...newShipment, current_facility: e.target.value})} />
               </div>
-              <button type="submit" className="w-full mt-2 bg-blue-600 hover:bg-blue-500 text-white font-medium text-sm py-2 rounded shadow transition-colors">
-                Initialize Parent Shipment Node
+              <button type="submit" className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs py-2 rounded shadow-lg transition-all duration-150">
+                Deploy Root Node
               </button>
             </form>
           </section>
 
-          <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
-            <h2 className="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              ChainCustody Node Split Controller
+          <section className="bg-slate-900/60 border border-slate-900 rounded-xl p-5 shadow-2xl backdrop-blur-md">
+            <h2 className="text-sm font-semibold tracking-wide text-slate-300 uppercase mb-4 flex items-center gap-2">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Node Split Configuration
             </h2>
 
             <div className="mb-4">
-              <label className="block text-xs font-mono text-slate-400 mb-1">SELECT ACTIVE TARGET NODE</label>
-              <select className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 focus:border-emerald-500 outline-none" value={selectedParentId} onChange={e => setSelectedParentId(e.target.value)}>
-                <option value="">-- Choose Target Batch Node --</option>
+              <label className="block text-[10px] font-mono text-slate-500 mb-1">SELECT CANVAS FOCUS NODE</label>
+              <select className="w-full bg-slate-950 border border-slate-800 rounded px-3 py-2 text-xs text-slate-300 focus:border-indigo-500 outline-none" value={selectedParentId} onChange={e => setSelectedParentId(e.target.value)}>
+                <option value="">-- Choose target block --</option>
                 {batches.map(b => (
                   <option key={b.id} value={b.id}>
-                    {b.batch_number} ({b.sku}) - Available: {parseFloat(b.total_quantity).toFixed(2)} {b.unit}
+                    {b.batch_number} [{b.sku}]
                   </option>
                 ))}
               </select>
             </div>
 
             {parentDetails && (
-              <div className="grid grid-cols-2 gap-4 bg-slate-950 border border-slate-800 rounded-lg p-4 mb-4 text-xs font-mono">
+              <div className="grid grid-cols-2 gap-4 bg-slate-950 border border-slate-900 rounded-lg p-3 mb-4 text-[10px] font-mono">
                 <div>
-                  <div className="text-slate-500">STARTING STOCK</div>
-                  <div className="text-sm font-bold text-slate-300 mt-0.5">{parseFloat(parentDetails.total_quantity).toFixed(2)} {parentDetails.unit}</div>
+                  <div className="text-slate-500">BASE ALLOCATION</div>
+                  <div className="text-xs font-bold text-slate-300 mt-0.5">{parseFloat(parentDetails.total_quantity).toFixed(2)} {parentDetails.unit}</div>
                 </div>
                 <div>
-                  <div className="text-slate-500">REALTIME REMAINING</div>
-                  <div className={`text-sm font-bold mt-0.5 ${remainingBalance < 0 ? 'text-red-400' : 'text-emerald-400'}`}>
+                  <div className="text-slate-500">CANVAS UNALLOCATED</div>
+                  <div className={`text-xs font-bold mt-0.5 ${remainingBalance < 0 ? 'text-red-400' : 'text-indigo-400'}`}>
                     {remainingBalance.toFixed(2)} {parentDetails.unit}
                   </div>
                 </div>
@@ -277,27 +308,27 @@ export default function App() {
 
             {selectedParentId && (
               <form onSubmit={handleCommitSplit} className="space-y-4">
-                <div className="flex justify-between items-center border-t border-slate-800 pt-3">
-                  <span className="text-xs font-semibold text-slate-400">Target Lineage Outputs Mapping</span>
-                  <button type="button" onClick={addChildRow} className="bg-emerald-950 hover:bg-emerald-900 border border-emerald-800 text-emerald-400 text-xs px-2.5 py-1 rounded transition-colors">
-                    + Add Child Split
+                <div className="flex justify-between items-center border-t border-slate-800/60 pt-3">
+                  <span className="text-[10px] font-mono text-slate-400">Target Lineage Mapping</span>
+                  <button type="button" onClick={addChildRow} className="bg-slate-950 hover:bg-slate-900 border border-slate-800 text-indigo-400 text-xs px-2.5 py-1 rounded transition-colors">
+                    + Add Output Branch
                   </button>
                 </div>
 
                 {childSplits.map((child, idx) => (
-                  <div key={idx} className="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2 relative">
+                  <div key={idx} className="bg-slate-950 border border-slate-800/80 rounded-lg p-3 space-y-2">
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] font-mono text-slate-500">CHILD IDENTIFIER</label>
-                        <input required type="text" className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 outline-none" placeholder="e.g. B-CHLD-XYZ" value={child.batchNumber} onChange={e => {
+                        <label className="text-[9px] font-mono text-slate-500">BRANCH ID</label>
+                        <input required type="text" className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-indigo-500" placeholder="e.g. B-CHLD-01" value={child.batchNumber} onChange={e => {
                           const updated = [...childSplits];
                           updated[idx].batchNumber = e.target.value;
                           setChildSplits(updated);
                         }} />
                       </div>
                       <div>
-                        <label className="text-[10px] font-mono text-slate-500">VOLUME ALLOCATION ({parentDetails?.unit})</label>
-                        <input required type="number" step="any" className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 outline-none" placeholder="0" value={child.quantity} onChange={e => {
+                        <label className="text-[9px] font-mono text-slate-500">QUANTITY</label>
+                        <input required type="number" step="any" className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-indigo-500" placeholder="0" value={child.quantity} onChange={e => {
                           const updated = [...childSplits];
                           updated[idx].quantity = e.target.value;
                           setChildSplits(updated);
@@ -305,8 +336,8 @@ export default function App() {
                       </div>
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono text-slate-500">DESTINATION DISPATCH HUB</label>
-                      <input required type="text" className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 outline-none" placeholder="e.g. London Logistics Hub" value={child.facility} onChange={e => {
+                      <label className="text-[9px] font-mono text-slate-500">ROUTING TARGET FACILITY</label>
+                      <input required type="text" className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-100 outline-none focus:border-indigo-500" placeholder="e.g. Berlin Logistics Yard" value={child.facility} onChange={e => {
                         const updated = [...childSplits];
                         updated[idx].facility = e.target.value;
                         setChildSplits(updated);
@@ -316,33 +347,41 @@ export default function App() {
                 ))}
 
                 {childSplits.length > 0 && (
-                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-sm py-2 rounded shadow transition-colors mt-2">
-                    Commit Immutable Split Chain Link
+                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs py-2 rounded shadow-lg transition-colors mt-2">
+                    Execute Flow Split
                   </button>
                 )}
               </form>
             )}
           </section>
 
-          {error && <div className="bg-red-950/50 border border-red-800/80 rounded-lg p-4 text-xs font-mono text-red-400">{error}</div>}
-          {success && <div className="bg-emerald-950/50 border border-emerald-800/80 rounded-lg p-4 text-xs font-mono text-emerald-400">{success}</div>}
+          {error && <div className="bg-red-950/40 border border-red-900 rounded-lg p-4 text-xs font-mono text-red-400">{error}</div>}
+          {success && <div className="bg-emerald-950/40 border border-emerald-900 rounded-lg p-4 text-xs font-mono text-emerald-400">{success}</div>}
         </div>
 
-        <div className="lg:col-span-7">
-          <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl min-h-[500px]">
-            <h2 className="text-lg font-semibold text-slate-200 mb-2">Hierarchical Ancestry Tree</h2>
-            <p className="text-xs text-slate-400 mb-6">Real-time structured top-down lineage maps generated dynamically from tracking pools.</p>
+        {/* RIGHT COLUMN PANEL: INFINITE WORKFLOW CANVAS */}
+        <div className="xl:col-span-8">
+          <section className="bg-slate-900/30 border border-slate-900 rounded-2xl p-6 min-h-[650px] relative overflow-hidden flex flex-col">
+            <div className="mb-6">
+              <h2 className="text-sm font-semibold tracking-wide text-slate-300 uppercase flex items-center gap-2">
+                Execution Flow Workspace
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">Horizontal relational graph showing deployment lineages.</p>
+            </div>
 
-            {lineageTree ? (
-              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800/50 overflow-x-auto">
-                <NestedTreeRenderNode node={lineageTree} />
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center text-center h-80 border border-dashed border-slate-800 rounded-xl bg-slate-950/30 text-slate-500">
-                <div className="text-sm font-mono">No target selected</div>
-                <div className="text-xs mt-1 max-w-xs">Select an active tracking node from the drop-down menu to view its top-down structural split layout.</div>
-              </div>
-            )}
+            {/* GRID GRAPH BACKDROP CANVAS */}
+            <div className="flex-1 bg-slate-950/70 border border-slate-900/60 rounded-xl p-8 overflow-auto flex items-center relative shadow-inner min-h-[500px] style-grid-pattern">
+              {lineageTree ? (
+                <div className="relative inline-block">
+                  <WorkflowNodeGroup node={lineageTree} />
+                </div>
+              ) : (
+                <div className="mx-auto text-center font-mono text-xs text-slate-600 max-w-sm">
+                  <div>// CANVAS_IDLE</div>
+                  <div className="text-[11px] mt-1 text-slate-500">Select an active tracking target to generate its horizontal execution node chain map.</div>
+                </div>
+              )}
+            </div>
           </section>
         </div>
 
